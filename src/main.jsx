@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { pinyin } from "pinyin-pro";
 import {
   ArrowLeftRight,
   Check,
@@ -164,6 +165,28 @@ function tableStatus(table) {
   if (count > table.capacity) return "over";
   if (count < table.capacity) return "short";
   return "ok";
+}
+
+function normalizeSearchKey(value) {
+  return String(value || "").toLowerCase().replace(/\s+/g, "");
+}
+
+function pinyinKeys(value) {
+  const text = String(value || "");
+  return [
+    pinyin(text, { toneType: "none" }),
+    pinyin(text, { pattern: "first", toneType: "none" }),
+  ].map(normalizeSearchKey);
+}
+
+function guestSearchText(table, guest) {
+  return [
+    guest.name,
+    table.id,
+    tableGiftText(table),
+    tableNoteText(table),
+    ...pinyinKeys(guest.name),
+  ].map(normalizeSearchKey).join(" ");
 }
 
 function guestText(guest) {
@@ -434,11 +457,11 @@ function App() {
     return { seats, warnings, tables: tables.length };
   }, [tables, staging]);
   const matches = useMemo(() => {
-    const key = query.trim();
+    const key = normalizeSearchKey(query);
     if (!key) return [];
     return sortedTables.flatMap((table) =>
       table.guests
-        .filter((guest) => `${guest.name}${table.id}${tableGiftText(table)}${tableNoteText(table)}`.includes(key))
+        .filter((guest) => guestSearchText(table, guest).includes(key))
         .map((guest) => ({ ...guest, tableId: table.id }))
     );
   }, [query, sortedTables]);
@@ -743,7 +766,7 @@ function App() {
             </div>
             <label className="search">
               <Search size={17} />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索宾客、桌号、备注" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索姓名、首字母、桌号、备注" />
             </label>
           </div>
           <div className="mobileViewSwitch" role="tablist" aria-label="手机视图切换">
