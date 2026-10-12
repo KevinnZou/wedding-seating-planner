@@ -15,11 +15,14 @@ import {
   ListTree,
   Users,
   X,
+  Map,
 } from "lucide-react";
 import "./styles.css";
+import defaultTables from "./defaultTables.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
+const DEFAULT_DATA_VERSION = "2026-10-12-local-latest";
 
 const tablePositions = [
   ["01", 39, 18, "主"],
@@ -63,47 +66,8 @@ const tablePositions = [
   ["66", 92, 84, "备"],
 ];
 
-const seedTables = [
-  t("01", "无礼份标注", "", [["男方", 5], ["女方", 5]], 15),
-  t("03", "5 份礼", "超 2 人", [["楼华君", 3], ["郭有泉", 1], ["文双华", 4], ["徐伟", 2], ["马新刚", 2]]),
-  t("05", "9 份礼", "", [["陆功田", 2], ["丁伟民", 1], ["黄星娣", 1], ["金国君", 2], ["阮国良", 1], ["周新", 1], ["陈敏", 1], ["洪艳丽", 1]]),
-  t("07", "6 份礼", "", [["沈建红", 2], ["许敬华", 2], ["杨志", 2], ["许进益", 2], ["郑子光", 1], ["苏文全", 1]]),
-  t("09", "无礼份标注", "", [["新娘朋友", 10]]),
-  t("11", "无礼份标注", "", [["新娘同事", 10]]),
-  t("13", "10 份礼", "", [["罗明", 2], ["磨振佳", 1], ["王健", 2], ["柳玉青", 1], ["李波", 1], ["张传东", 1], ["孟祥宇", 1], ["应奇峰", 1]]),
-  t("15", "3 份礼", "", [["魏巍", 3], ["郭树春", 4], ["马云飞", 3]]),
-  t("17", "无礼份标注", "", [["新郎同学", 10]]),
-  t("19", "无礼份标注", "", [["新郎同事", 10]]),
-  t("21", "1 份礼", "", [["汪锦霞", 1], ["余梓铭", 1], ["余梓墨", 1], ["郭思颖", 1], ["余梓丘", 1], ["余梓齐", 1], ["余梓昊", 1], ["余鑫笑", 1], ["余晟韬", 1], ["余晟旭", 1]]),
-  t("23", "5 份礼", "", [["刘江明", 2], ["余建军", 2], ["李荣林", 2], ["徐爱冬", 2], ["张明财", 2]]),
-  t("25", "5 份礼", "", [["何燕青", 2], ["邹卫龙", 2], ["华炎桃", 2], ["周传发", 2], ["方乃兴", 2]]),
-  t("27", "9 份礼", "", [["刘新云", 1], ["叶志军", 1], ["邵志平", 2], ["郭向阳", 1], ["汪的", 1], ["刘成", 1], ["袁岳清", 1], ["施後法", 1], ["陈国兴", 1]]),
-  t("29", "5 份礼", "", [["熊化贵", 3], ["程前", 2], ["倪小平", 3], ["徐才虎", 1], ["查大川", 1]]),
-  t("31", "3 份礼", "", [["周建平", 3], ["应林祥", 4], ["梁贵山", 3]]),
-  t("33", "6 份礼", "缺 1 人", [["邹法龙", 2], ["张顺根", 2], ["邹卫君", 2], ["邱金林", 2], ["何燕明", 1]]),
-  t("35", "4 份礼", "", [["胡红燕", 1], ["徐勇", 1], ["晓晓", 3], ["许輝", 1], ["方光正", 1], ["朱如密", 3]]),
-  t("37", "4 份礼", "", [["沈海峰", 2], ["汤华萍", 4], ["邹莲君", 2], ["张珍", 2]]),
-  t("02", "9 份礼", "", [["程渭山", 1], ["陈艳华", 2], ["郑仓元", 2], ["钱国女", 1], ["余和平", 2], ["方华", 2], ["徐勤根", 1], ["陈先勇", 2], ["张裕", 1], ["常向兵", 1]], 15),
-  t("06", "无礼份标注", "", [["周宝富", 1], ["邵军", 2], ["姚志云", 2], ["丁星阳", 1], ["王建辉", 1], ["余太荣", 1], ["余力成", 1]]),
-  t("08", "4 份礼", "", [["姜根旺", 2], ["姜立忠", 2], ["吴世峰", 1], ["余满江", 3], ["程浩", 4]]),
-  t("10", "4 份礼", "缺 5 人", [["吴世峰", 1], ["唐必文", 1], ["张月初", 2], ["王影萍", 1]]),
-  t("12", "10 份礼", "", [["余海富", 1], ["余海峰", 1], ["余志荣", 1], ["余贤忠", 1], ["余志平", 1], ["余志瑾", 1], ["余德军", 1], ["余志雄", 1], ["胡祖平", 1]]),
-  t("16", "7 份礼", "", [["童政富", 1], ["汪家喜", 2], ["王建平", 2], ["陈孝将", 2], ["胡军", 2], ["余成亮", 1]]),
-  t("18", "7 份礼", "", [["方志红", 2], ["余沪兵", 1], ["程永芬", 2], ["汪洋", 1], ["江伟霞", 2], ["郑建英", 1]]),
-  t("20", "3 份礼", "", [["严良英", 1], ["郑夏睿", 1], ["汪国仙", 3], ["余德英", 3], ["王璐", 2]]),
-  t("22", "5 份礼", "", [["宋柏槐", 2], ["刘仿强", 2], ["金泽民", 2], ["韩英玲", 2], ["冯旭平", 2]]),
-  t("26", "7 份礼", "缺 1 人", [["付兴武", 2], ["叶向华", 2], ["宋冬冬", 1], ["邹武红", 1], ["叶孝红", 1], ["汪贵飞", 1], ["叶孝堂", 1]]),
-  t("28", "5 份礼", "", [["汪文波", 3], ["何伟阳", 2], ["郑祥怀", 1], ["程志亮", 2], ["江明", 2]]),
-  t("30", "5 份礼", "", [["俞河潮", 1], ["付华女", 1], ["邹卫芬", 4], ["邹小芬", 2], ["项伟", 2]]),
-  t("32", "5 份礼", "", [["戴卫群", 2], ["丰建义", 2], ["黄应财", 2], ["何建龙", 2], ["毛春香", 2]]),
-  t("36", "10 份礼", "", [["余谳雄", 1], ["余水法", 1], ["余古那", 1], ["余坤标", 1], ["余坤跃", 1], ["余献那", 1], ["胡春标", 1], ["余书红", 1], ["胡舍丹", 1], ["胡金仙", 1]]),
-  t("50", "3 份礼", "缺 2 人", [["汪仙兰", 1], ["徐根明", 2], ["余林凤", 1], ["章浩冉", 1], ["余金兰", 1], ["余诗函", 1], ["余诗淼", 1]]),
-  t("52", "3 份礼", "", [["邹志锋", 4], ["邹志星", 3], ["王鼎利", 3]]),
-  t("56", "4 份礼", "缺 1 人", [["邹雨龙", 4], ["邹文清", 2], ["邹文龙", 2], ["邹顺龙", 1]]),
-  t("58", "7 份礼", "", [["徐国和", 1], ["徐正和", 2], ["徐星和", 2], ["徐发和", 2], ["谢正田", 1], ["冬焦", 1], ["余美忠（司机）", 1]]),
-  t("60", "6 份礼", "", [["邹鹏", 4], ["汪仙娥", 1], ["余慧芳", 1], ["毛金仙", 1], ["龙猛", 2], ["汪晓剑", 1], ["余贤美", 1]]),
-  t("66", "无礼份标注", "备桌", []),
-];
+const seedTables = defaultTables;
+
 
 function t(id, gifts, note, groups, capacity = CAPACITY) {
   const giftCounts = distributeGiftCounts(groups.length, parseGiftCount(gifts) ? groups.length : 0);
@@ -418,30 +382,47 @@ async function copyImageToClipboard(blob) {
   ]);
 }
 
+function saveTables(next) {
+  localStorage.setItem("wedding-seating-v1", JSON.stringify(next));
+  localStorage.setItem("wedding-seating-gift-model", GIFT_MODEL_VERSION);
+  localStorage.setItem("wedding-seating-default-version", DEFAULT_DATA_VERSION);
+}
+
+function loadInitialTables() {
+  const saved = localStorage.getItem("wedding-seating-v1");
+  const savedDefaultVersion = localStorage.getItem("wedding-seating-default-version");
+  if (!saved || savedDefaultVersion !== DEFAULT_DATA_VERSION) {
+    const next = normalizeTables(seedTables);
+    saveTables(next);
+    localStorage.removeItem("wedding-seating-staging-v1");
+    return next;
+  }
+  const parsed = JSON.parse(saved).map((table) => (
+    table.id === "01" && table.capacity === 10 ? { ...table, capacity: 15 } : table
+  ));
+  if (localStorage.getItem("wedding-seating-gift-model") !== GIFT_MODEL_VERSION) {
+    const migrated = normalizeTables(parsed.map(resetTableGiftCounts));
+    saveTables(migrated);
+    return migrated;
+  }
+  return normalizeTables(parsed);
+}
+
+function loadInitialStaging() {
+  if (localStorage.getItem("wedding-seating-default-version") !== DEFAULT_DATA_VERSION) return [];
+  const saved = localStorage.getItem("wedding-seating-staging-v1");
+  return saved ? normalizeStagingItems(JSON.parse(saved)) : [];
+}
+
 function App() {
-  const [tables, setTables] = useState(() => {
-    const saved = localStorage.getItem("wedding-seating-v1");
-    if (!saved) return normalizeTables(seedTables);
-    const parsed = JSON.parse(saved).map((table) => (
-      table.id === "01" && table.capacity === 10 ? { ...table, capacity: 15 } : table
-    ));
-    if (localStorage.getItem("wedding-seating-gift-model") !== GIFT_MODEL_VERSION) {
-      const migrated = normalizeTables(parsed.map(resetTableGiftCounts));
-      localStorage.setItem("wedding-seating-v1", JSON.stringify(migrated));
-      localStorage.setItem("wedding-seating-gift-model", GIFT_MODEL_VERSION);
-      return migrated;
-    }
-    return normalizeTables(parsed);
-  });
-  const [staging, setStaging] = useState(() => {
-    const saved = localStorage.getItem("wedding-seating-staging-v1");
-    return saved ? normalizeStagingItems(JSON.parse(saved)) : [];
-  });
+  const [tables, setTables] = useState(loadInitialTables);
+  const [staging, setStaging] = useState(loadInitialStaging);
   const [selectedId, setSelectedId] = useState(null);
   const [query, setQuery] = useState("");
   const [targetId, setTargetId] = useState("66");
   const [pickedGuestId, setPickedGuestId] = useState(null);
   const [showGuests, setShowGuests] = useState(false);
+  const [mobileView, setMobileView] = useState("list");
   const [copyFeedback, setCopyFeedback] = useState("");
 
   const selected = selectedId ? tables.find((table) => table.id === selectedId) : null;
@@ -464,8 +445,7 @@ function App() {
 
   function persist(next) {
     setTables(next);
-    localStorage.setItem("wedding-seating-v1", JSON.stringify(next));
-    localStorage.setItem("wedding-seating-gift-model", GIFT_MODEL_VERSION);
+    saveTables(next);
   }
 
   function persistStaging(next) {
@@ -715,10 +695,10 @@ function App() {
   }
 
   function reset() {
-    localStorage.removeItem("wedding-seating-v1");
     localStorage.removeItem("wedding-seating-staging-v1");
-    localStorage.setItem("wedding-seating-gift-model", GIFT_MODEL_VERSION);
-    setTables(normalizeTables(seedTables));
+    const next = normalizeTables(seedTables);
+    saveTables(next);
+    setTables(next);
     setStaging([]);
     setSelectedId(null);
     setPickedGuestId(null);
@@ -766,11 +746,34 @@ function App() {
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索宾客、桌号、备注" />
             </label>
           </div>
+          <div className="mobileViewSwitch" role="tablist" aria-label="手机视图切换">
+            <button
+              type="button"
+              className={mobileView === "list" ? "active" : ""}
+              onClick={() => setMobileView("list")}
+            >
+              <ListTree size={16} /> 桌卡列表
+            </button>
+            <button
+              type="button"
+              className={mobileView === "map" ? "active" : ""}
+              onClick={() => setMobileView("map")}
+            >
+              <Map size={16} /> 平面图
+            </button>
+          </div>
           <SearchResults query={query} matches={matches} onSelectTable={setSelectedId} compact />
+
+          <MobileTableList
+            tables={sortedTables}
+            selectedId={selectedId}
+            onSelectTable={setSelectedId}
+          />
 
           <div
             className={`hall ${showGuests ? "guestMode" : ""}`}
             aria-label="宴会厅平面图"
+            data-mobile-view={mobileView}
             onClick={(e) => {
               if (!e.target.closest?.(".tableNode")) setSelectedId(null);
             }}
@@ -882,6 +885,35 @@ function readDragData(event) {
     tableId: event.dataTransfer.getData("tableId"),
     stagingId: event.dataTransfer.getData("stagingId"),
   };
+}
+
+function MobileTableList({ tables, selectedId, onSelectTable }) {
+  return (
+    <div className="mobileTableList">
+      {tables.map((table) => {
+        const status = tableStatus(table);
+        const note = tableNoteText(table);
+        return (
+          <button
+            type="button"
+            key={table.id}
+            className={`mobileTableCard ${status} ${selectedId === table.id ? "selected" : ""}`}
+            onClick={() => onSelectTable(table.id)}
+          >
+            <span className="mobileTableNo">{table.id}</span>
+            <span className="mobileTableMain">
+              <strong>{table.id} 号桌</strong>
+              <em>{table.guests.length ? table.guests.map(guestText).join("、") : "空桌"}</em>
+            </span>
+            <span className="mobileTableMeta">
+              <b>{tableCount(table)}/{table.capacity}</b>
+              <small>{tableGiftText(table)}{note ? `｜${note}` : ""}</small>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function TableNode({ table, pos, selected, showGuests, onSelect, onDropData }) {
