@@ -23,7 +23,7 @@ import defaultTables from "./defaultTables.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
-const DEFAULT_DATA_VERSION = "2026-10-12-local-latest";
+const DEFAULT_DATA_VERSION = "2026-10-12-new-guest-list";
 
 const tablePositions = [
   ["01", 39, 18, "主"],
@@ -153,7 +153,7 @@ function tableGiftText(table) {
 
 function tableNoteText(table) {
   const count = tableCount(table);
-  if (table.note.includes("备")) return "备桌";
+  if (table.note.includes("备")) return table.note || "备桌";
   if (count > table.capacity) return `超 ${count - table.capacity} 人`;
   if (count < table.capacity) return `缺 ${table.capacity - count} 人`;
   return table.note.replace(/(?:缺|超)\s*\d+\s*人/g, "").trim();
