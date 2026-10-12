@@ -23,7 +23,7 @@ import defaultTables from "./defaultTables.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
-const DEFAULT_DATA_VERSION = "2026-10-12-new-guest-list";
+const DEFAULT_DATA_VERSION = "2026-10-12-new-guest-list-all-names";
 
 const tablePositions = [
   ["01", 39, 18, "主"],
