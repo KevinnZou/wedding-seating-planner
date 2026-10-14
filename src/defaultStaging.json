@@ -1,0 +1,17 @@
+[
+  {
+    "id": "stage-import-0",
+    "label": "余美忠（司机） · 来自 60 桌",
+    "sourceTableId": "60",
+    "guests": [
+      {
+        "id": "stage-import-0-0",
+        "name": "余美忠（司机）",
+        "count": 1,
+        "giftCount": 1,
+        "giftNote": "",
+        "moneyNote": ""
+      }
+    ]
+  }
+]

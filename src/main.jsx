@@ -23,10 +23,11 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import defaultTables from "./defaultTables.json";
+import defaultStaging from "./defaultStaging.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
-const DEFAULT_DATA_VERSION = "2026-10-14-final-seating-v1";
+const DEFAULT_DATA_VERSION = "2026-10-14-final-seating-v2";
 const PUBLIC_GUEST_SEARCH_URL = "https://kevinnzou.github.io/wedding-seating-planner/#/guest-search";
 
 const tablePositions = [
@@ -72,6 +73,7 @@ const tablePositions = [
 ];
 
 const seedTables = defaultTables;
+const seedStaging = defaultStaging;
 
 
 function t(id, gifts, note, groups, capacity = CAPACITY) {
@@ -920,7 +922,7 @@ function loadInitialTables() {
   if (!saved || savedDefaultVersion !== DEFAULT_DATA_VERSION) {
     const next = normalizeTables(seedTables);
     saveTables(next);
-    localStorage.removeItem("wedding-seating-staging-v1");
+    localStorage.setItem("wedding-seating-staging-v1", JSON.stringify(normalizeStagingItems(seedStaging)));
     return next;
   }
   const parsed = JSON.parse(saved).map((table) => (
@@ -935,9 +937,9 @@ function loadInitialTables() {
 }
 
 function loadInitialStaging() {
-  if (localStorage.getItem("wedding-seating-default-version") !== DEFAULT_DATA_VERSION) return [];
+  if (localStorage.getItem("wedding-seating-default-version") !== DEFAULT_DATA_VERSION) return normalizeStagingItems(seedStaging);
   const saved = localStorage.getItem("wedding-seating-staging-v1");
-  return saved ? normalizeStagingItems(JSON.parse(saved)) : [];
+  return saved ? normalizeStagingItems(JSON.parse(saved)) : normalizeStagingItems(seedStaging);
 }
 
 function App() {
@@ -1315,11 +1317,12 @@ function App() {
   }
 
   function reset() {
-    localStorage.removeItem("wedding-seating-staging-v1");
     const next = normalizeTables(seedTables);
+    const nextStaging = normalizeStagingItems(seedStaging);
     saveTables(next);
+    localStorage.setItem("wedding-seating-staging-v1", JSON.stringify(nextStaging));
     setTables(next);
-    setStaging([]);
+    setStaging(nextStaging);
     setSelectedId(null);
     setPickedGuestId(null);
   }
