@@ -1698,7 +1698,7 @@ function GuestSearchPage({ tables }) {
             </div>
             <div>
               <strong>{guestText(guest)}</strong>
-              <span>{guest.count} 人同行</span>
+              <span>登记人数：{guest.count} 位</span>
             </div>
           </article>
         ))}
