@@ -1370,13 +1370,16 @@ function App() {
             <button className="ghost" onClick={() => openPrintPreview("moneyInitial")}><Printer size={16} /> 礼金表首字母</button>
             <button className="ghost" onClick={() => openPrintPreview("index")}><Printer size={16} /> 首字母索引</button>
           </div>
+          <div className="guestActionGroup">
+            <span>宾客自助查询</span>
+            <button className="ghost" onClick={copyGuestSearchLink}><Clipboard size={16} /> 复制链接</button>
+            <button className="ghost" onClick={downloadGuestSearchQr}><Download size={16} /> 下载二维码</button>
+          </div>
           <div className="exportGroup">
             <button className="ghost" onClick={copyTextExport}><Clipboard size={16} /> 复制文字</button>
             <button className="ghost" onClick={copyTableExport}><FileSpreadsheet size={16} /> 复制表格</button>
             <button className="ghost" onClick={copySeatingImage}><ImageDown size={16} /> 复制图</button>
             <button className="ghost" onClick={exportSeatingImage}><Download size={16} /> 下载图</button>
-            <button className="ghost" onClick={copyGuestSearchLink}><Clipboard size={16} /> 复制宾客链接</button>
-            <button className="ghost" onClick={downloadGuestSearchQr}><Download size={16} /> 下载宾客二维码</button>
             <button onClick={exportCsv}><Download size={16} /> CSV</button>
           </div>
           {copyFeedback && <div className="copyToast"><Check size={15} /> {copyFeedback}</div>}
@@ -1661,8 +1664,11 @@ function GuestSearchPage({ tables }) {
   return (
     <main className="guestSearchPage">
       <section className="guestSearchHero">
-        <h1>婚礼查桌</h1>
-        <p>输入姓名或姓名首字母，查看您的桌号。</p>
+        <div className="guestHeroTitle">
+          <span>欢迎赴宴</span>
+          <h1>婚礼查桌</h1>
+          <p>输入姓名或姓名首字母，查看您的桌号。</p>
+        </div>
         <label>
           <Search size={22} />
           <input
@@ -1681,12 +1687,18 @@ function GuestSearchPage({ tables }) {
         {hasQuery && results.length === 0 && (
           <div className="guestLookupEmpty">没有找到匹配姓名，可以换全名或姓名首字母试试。</div>
         )}
+        {hasQuery && results.length > 0 && (
+          <h2>找到 {results.length} 位宾客</h2>
+        )}
         {hasQuery && results.length > 0 && results.map((guest) => (
           <article key={`${guest.tableId}-${guest.id}`} className="guestLookupCard">
-            <div className="guestLookupTable">{guest.tableId}</div>
+            <div className="guestLookupTable">
+              <small>桌号</small>
+              <b>{guest.tableId}</b>
+            </div>
             <div>
               <strong>{guestText(guest)}</strong>
-              <span>{guest.tableId} 号桌｜{guest.count} 人</span>
+              <span>{guest.count} 人同行</span>
             </div>
           </article>
         ))}
