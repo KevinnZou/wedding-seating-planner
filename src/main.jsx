@@ -27,7 +27,7 @@ import defaultStaging from "./defaultStaging.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
-const DEFAULT_DATA_VERSION = "2026-10-14-final-seating-v2";
+const DEFAULT_DATA_VERSION = "2026-10-14-final-seating-v4";
 const PUBLIC_GUEST_SEARCH_URL = "https://kevinnzou.github.io/wedding-seating-planner/#/guest-search";
 
 const tablePositions = [
@@ -359,12 +359,53 @@ function parseImportedLine(line, currentById) {
 }
 
 function splitImportedTableBlocks(text) {
-  const source = String(text || "").replace(/\r/g, "\n");
+  const fullSource = String(text || "").replace(/\r/g, "\n");
+  const stagingStart = fullSource.search(/^\s*暂存区\s*$/m);
+  const source = stagingStart >= 0 ? fullSource.slice(0, stagingStart) : fullSource;
   const starts = [...source.matchAll(/\d{1,2}\s*号桌[（(]/g)].map((match) => match.index);
   return starts.map((start, index) => {
     const end = starts[index + 1] ?? source.length;
     return source.slice(start, end).trim();
   });
+}
+
+function parseImportedStagingText(text) {
+  const source = String(text || "").replace(/\r/g, "\n");
+  const stagingStart = source.search(/^\s*暂存区\s*$/m);
+  if (stagingStart < 0) return null;
+  const section = source
+    .slice(stagingStart)
+    .replace(/^\s*暂存区\s*$/m, "")
+    .trim();
+  if (!section) return [];
+  return section
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const splitAt = line.search(/[：:]/);
+      const rawLabel = splitAt >= 0 ? line.slice(0, splitAt).trim() : "暂存宾客";
+      const rawGuests = splitAt >= 0 ? line.slice(splitAt + 1).trim() : line;
+      const guests = parseImportedGuests(rawGuests).map((guest, guestIndex) => ({
+        id: `stage-import-${index}-${guest.name}-${guestIndex}`,
+        name: guest.name,
+        count: guest.count,
+        giftCount: guest.giftCount ?? 0,
+        giftNote: guest.giftNote || "",
+        moneyNote: guest.moneyNote || "",
+      }));
+      if (!guests.length) return null;
+      const sourceTableId = rawLabel.match(/来自\s*(\d{1,2})\s*桌/)?.[1]?.padStart(2, "0")
+        || rawLabel.match(/(\d{1,2})\s*号桌/)?.[1]?.padStart(2, "0")
+        || "";
+      return {
+        id: `stage-import-${index}`,
+        label: rawLabel,
+        sourceTableId,
+        guests,
+      };
+    })
+    .filter(Boolean);
 }
 
 function parseImportedSeatingText(text, currentTables) {
@@ -381,7 +422,10 @@ function parseImportedSeatingText(text, currentTables) {
   parsed.forEach((table) => {
     if (!currentById.has(table.id)) merged.push(table);
   });
-  return normalizeTables(merged);
+  return {
+    tables: normalizeTables(merged),
+    staging: parseImportedStagingText(text),
+  };
 }
 
 function tableRows(sortedTables, staging) {
@@ -737,6 +781,34 @@ function textSummary(sortedTables, staging, stats) {
     lines.push("", "暂存区");
     staging.forEach((item) => {
       lines.push(`${item.label}：${item.guests.map(guestDetailText).join("、")}`);
+    });
+  }
+  return lines.join("\n");
+}
+
+function conciseTextSummary(sortedTables, staging, stats) {
+  const tableLine = (table) => {
+    const guests = table.guests.length ? table.guests.map(guestText).join("、") : "空桌";
+    return `${table.id} 号桌：${guests}`;
+  };
+  const sectionLines = (title, tables) => [
+    title,
+    ...tables.flatMap((table) => ["", tableLine(table)]),
+  ];
+  const oddTables = sortedTables.filter((table) => Number(table.id) % 2 === 1);
+  const evenTables = sortedTables.filter((table) => Number(table.id) % 2 === 0);
+  const lines = [
+    "婚礼排桌名单（简洁核对版）",
+    `合计：${stats.seats} 位｜${sortedTables.length} 桌`,
+    "",
+    ...sectionLines("奇数桌", oddTables),
+    "",
+    ...sectionLines("偶数桌", evenTables),
+  ];
+  if (staging.length) {
+    lines.push("", "暂存区");
+    staging.forEach((item) => {
+      lines.push("", `${item.label}：${item.guests.map(guestText).join("、")}`);
     });
   }
   return lines.join("\n");
@@ -1225,6 +1297,15 @@ function App() {
     }
   }
 
+  async function copyConciseTextExport() {
+    try {
+      await copyToClipboard({ plain: conciseTextSummary(sortedTables, staging, stats) });
+      showCopied("简洁文字已复制");
+    } catch {
+      showCopied("复制失败");
+    }
+  }
+
   async function copyTableExport() {
     const rows = tableRows(sortedTables, staging);
     const plain = rows.map((row) => row.join("\t")).join("\n");
@@ -1329,18 +1410,23 @@ function App() {
 
   function importSeatingText() {
     try {
-      const next = parseImportedSeatingText(importText, sortedTables);
+      const imported = parseImportedSeatingText(importText, sortedTables);
+      const next = imported.tables;
+      const nextStaging = imported.staging === null ? staging : normalizeStagingItems(imported.staging);
       persist(next);
-      persistStaging([]);
+      persistStaging(nextStaging);
       setSelectedId(null);
       setPickedGuestId(null);
       setImportOpen(false);
       setImportText("");
       setImportError("");
-      const importedSeats = next.reduce((sum, table) => sum + tableCount(table), 0);
-      const importedGifts = next.reduce((sum, table) => sum + tableGiftCount(table), 0);
+      const stagedSeats = nextStaging.reduce((sum, item) => sum + item.guests.reduce((guestSum, guest) => guestSum + guest.count, 0), 0);
+      const stagedGifts = nextStaging.reduce((sum, item) => sum + item.guests.reduce((guestSum, guest) => guestSum + (Number(guest.giftCount) || 0), 0), 0);
+      const importedSeats = next.reduce((sum, table) => sum + tableCount(table), 0) + stagedSeats;
+      const importedGifts = next.reduce((sum, table) => sum + tableGiftCount(table), 0) + stagedGifts;
       const importedWarnings = next.filter((table) => ["short", "over"].includes(tableStatus(table))).length;
-      showCopied(`已导入：${importedSeats} 位，${importedGifts} 份礼，${importedWarnings} 桌需确认`);
+      const stagingText = nextStaging.length ? `，暂存 ${stagedSeats} 位` : "";
+      showCopied(`已导入：${importedSeats} 位，${importedGifts} 份礼，${importedWarnings} 桌需确认${stagingText}`);
     } catch (error) {
       setImportError(error.message || "导入失败，请检查文本格式");
     }
@@ -1380,6 +1466,7 @@ function App() {
           </div>
           <div className="exportGroup">
             <button className="ghost" onClick={copyTextExport}><Clipboard size={16} /> 复制文字</button>
+            <button className="ghost" onClick={copyConciseTextExport}><Clipboard size={16} /> 复制简洁版</button>
             <button className="ghost" onClick={copyTableExport}><FileSpreadsheet size={16} /> 复制表格</button>
             <button className="ghost" onClick={copySeatingImage}><ImageDown size={16} /> 复制图</button>
             <button className="ghost" onClick={exportSeatingImage}><Download size={16} /> 下载图</button>
@@ -1547,7 +1634,7 @@ function App() {
             <div className="modalHeader">
               <div>
                 <h2>导入名单</h2>
-                <p>粘贴“婚礼排桌名单”整段文本，导入后会覆盖当前桌表并清空暂存区。</p>
+                <p>粘贴“婚礼排桌名单”整段文本，导入后会覆盖当前桌表；如果文本里包含“暂存区”，也会一起导入。</p>
               </div>
               <button className="closeInspector" onClick={() => setImportOpen(false)} aria-label="关闭导入">
                 <X size={17} />
