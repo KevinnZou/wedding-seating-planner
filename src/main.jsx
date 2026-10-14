@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { pinyin } from "pinyin-pro";
+import QRCode from "qrcode";
 import {
   ArrowLeftRight,
   Check,
@@ -26,6 +27,7 @@ import defaultTables from "./defaultTables.json";
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
 const DEFAULT_DATA_VERSION = "2026-10-14-final-seating-v1";
+const PUBLIC_GUEST_SEARCH_URL = "https://kevinnzou.github.io/wedding-seating-planner/#/guest-search";
 
 const tablePositions = [
   ["01", 39, 18, "主"],
@@ -216,6 +218,12 @@ function guestMatchesQuery(table, guest, query) {
   if (!key) return false;
   if (/^\d+$/.test(key)) return tableMatchesNumericQuery(table, key);
   return guestSearchText(table, guest).includes(key);
+}
+
+function publicGuestMatchesQuery(guest, query) {
+  const key = normalizeSearchKey(query);
+  if (!key || /^\d+$/.test(key)) return false;
+  return [guest.name, ...pinyinKeys(guest.name)].map(normalizeSearchKey).join(" ").includes(key);
 }
 
 function guestText(guest) {
@@ -976,6 +984,9 @@ function App() {
   if (routeHash === "#/search") {
     return <OnsiteSearchPage tables={sortedTables} stats={stats} />;
   }
+  if (routeHash === "#/guest-search") {
+    return <GuestSearchPage tables={sortedTables} />;
+  }
 
   function persist(next) {
     setTables(next);
@@ -1256,6 +1267,36 @@ function App() {
     }
   }
 
+  async function downloadGuestSearchQr() {
+    try {
+      const dataUrl = await QRCode.toDataURL(PUBLIC_GUEST_SEARCH_URL, {
+        width: 1000,
+        margin: 2,
+        errorCorrectionLevel: "M",
+        color: {
+          dark: "#1e2320",
+          light: "#ffffff",
+        },
+      });
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "宾客自助查桌二维码.png";
+      link.click();
+      showCopied("宾客二维码已下载");
+    } catch {
+      showCopied("二维码生成失败");
+    }
+  }
+
+  async function copyGuestSearchLink() {
+    try {
+      await copyToClipboard({ plain: PUBLIC_GUEST_SEARCH_URL });
+      showCopied("宾客查询链接已复制");
+    } catch {
+      showCopied("复制失败");
+    }
+  }
+
   function openPrintPreview(kind) {
     const documents = {
       registration: registrationPrintHtml(sortedTables, staging, stats),
@@ -1321,6 +1362,7 @@ function App() {
           </button>
           <button onClick={() => setImportOpen(true)} className="ghost"><Upload size={16} /> 导入名单</button>
           <button onClick={() => { window.location.hash = "#/search"; }} className="ghost"><Search size={16} /> 现场查询页</button>
+          <button onClick={() => { window.location.hash = "#/guest-search"; }} className="ghost"><Search size={16} /> 宾客查桌页</button>
           <button onClick={reset} className="ghost"><RotateCcw size={16} /> 重置</button>
           <div className="printGroup">
             <button className="ghost" onClick={() => openPrintPreview("registration")}><Printer size={16} /> 主登记表</button>
@@ -1333,6 +1375,8 @@ function App() {
             <button className="ghost" onClick={copyTableExport}><FileSpreadsheet size={16} /> 复制表格</button>
             <button className="ghost" onClick={copySeatingImage}><ImageDown size={16} /> 复制图</button>
             <button className="ghost" onClick={exportSeatingImage}><Download size={16} /> 下载图</button>
+            <button className="ghost" onClick={copyGuestSearchLink}><Clipboard size={16} /> 复制宾客链接</button>
+            <button className="ghost" onClick={downloadGuestSearchQr}><Download size={16} /> 下载宾客二维码</button>
             <button onClick={exportCsv}><Download size={16} /> CSV</button>
           </div>
           {copyFeedback && <div className="copyToast"><Check size={15} /> {copyFeedback}</div>}
@@ -1594,6 +1638,58 @@ function OnsiteSearchPage({ tables, stats }) {
         )) : (
           <div className="onsiteEmpty">没找到匹配客人，可以试试姓名首字母或桌号。</div>
         )}
+      </section>
+    </main>
+  );
+}
+
+function GuestSearchPage({ tables }) {
+  const [guestQuery, setGuestQuery] = useState("");
+  const entries = useMemo(() => tables.flatMap((table) =>
+    table.guests.map((guest) => ({
+      ...guest,
+      tableId: table.id,
+    }))
+  ), [tables]);
+  const results = useMemo(() => {
+    const key = normalizeSearchKey(guestQuery);
+    if (!key) return [];
+    return entries.filter((entry) => publicGuestMatchesQuery(entry, key)).slice(0, 20);
+  }, [entries, guestQuery]);
+  const hasQuery = guestQuery.trim();
+
+  return (
+    <main className="guestSearchPage">
+      <section className="guestSearchHero">
+        <h1>婚礼查桌</h1>
+        <p>输入姓名或姓名首字母，查看您的桌号。</p>
+        <label>
+          <Search size={22} />
+          <input
+            autoFocus
+            value={guestQuery}
+            onChange={(event) => setGuestQuery(event.target.value)}
+            placeholder="例如：李华 / lh"
+          />
+        </label>
+      </section>
+
+      <section className="guestLookupResults">
+        {!hasQuery && (
+          <div className="guestLookupEmpty">请输入姓名查询桌号。</div>
+        )}
+        {hasQuery && results.length === 0 && (
+          <div className="guestLookupEmpty">没有找到匹配姓名，可以换全名或姓名首字母试试。</div>
+        )}
+        {hasQuery && results.length > 0 && results.map((guest) => (
+          <article key={`${guest.tableId}-${guest.id}`} className="guestLookupCard">
+            <div className="guestLookupTable">{guest.tableId}</div>
+            <div>
+              <strong>{guestText(guest)}</strong>
+              <span>{guest.tableId} 号桌｜{guest.count} 人</span>
+            </div>
+          </article>
+        ))}
       </section>
     </main>
   );

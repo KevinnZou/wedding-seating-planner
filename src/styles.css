@@ -1190,6 +1190,118 @@ button:disabled {
   text-align: center;
 }
 
+.guestSearchPage {
+  min-height: 100vh;
+  padding: 18px;
+  background:
+    linear-gradient(rgba(103, 152, 123, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 152, 123, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, #fffdfb 0%, #fff6ef 100%);
+  background-size: 36px 36px, 36px 36px, auto;
+}
+
+.guestSearchHero,
+.guestLookupCard,
+.guestLookupEmpty {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+}
+
+.guestSearchHero {
+  padding: 22px;
+  margin-bottom: 12px;
+}
+
+.guestSearchHero h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+.guestSearchHero p {
+  margin: 7px 0 18px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.guestSearchHero label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 0 15px;
+  border: 2px solid rgba(103, 152, 123, 0.38);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--sage);
+}
+
+.guestSearchHero input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.guestLookupResults {
+  display: grid;
+  gap: 10px;
+}
+
+.guestLookupCard {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  box-shadow: 0 8px 22px rgba(75, 48, 31, 0.08);
+}
+
+.guestLookupTable {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--blush);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 950;
+}
+
+.guestLookupCard strong,
+.guestLookupCard span {
+  display: block;
+}
+
+.guestLookupCard strong {
+  font-size: 20px;
+}
+
+.guestLookupCard span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.guestLookupEmpty {
+  padding: 18px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+}
+
 .mobileViewSwitch,
 .mobileTableList {
   display: none;
@@ -1529,6 +1641,38 @@ button:disabled {
   .onsiteTableBadge {
     width: 48px;
     height: 48px;
+    font-size: 18px;
+  }
+
+  .guestSearchPage {
+    padding: 10px;
+  }
+
+  .guestSearchHero {
+    padding: 18px 14px;
+  }
+
+  .guestSearchHero h1 {
+    font-size: 26px;
+  }
+
+  .guestSearchHero input {
+    font-size: 18px;
+  }
+
+  .guestLookupCard {
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .guestLookupTable {
+    width: 58px;
+    height: 58px;
+    font-size: 23px;
+  }
+
+  .guestLookupCard strong {
     font-size: 18px;
   }
 }
