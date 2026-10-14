@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { pinyin } from "pinyin-pro";
 import {
@@ -12,18 +12,20 @@ import {
   ImageDown,
   Search,
   RotateCcw,
+  Printer,
   Trash2,
   ListTree,
+  Upload,
   Users,
   X,
-  Map,
+  Map as MapIcon,
 } from "lucide-react";
 import "./styles.css";
 import defaultTables from "./defaultTables.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
-const DEFAULT_DATA_VERSION = "2026-10-12-new-guest-list-all-names";
+const DEFAULT_DATA_VERSION = "2026-10-14-final-seating-v1";
 
 const tablePositions = [
   ["01", 39, 18, "主"],
@@ -77,7 +79,7 @@ function t(id, gifts, note, groups, capacity = CAPACITY) {
     gifts,
     note,
     capacity,
-    guests: groups.map(([name, count], index) => ({ id: `${id}-${name}`, name, count, giftCount: giftCounts[index] })),
+    guests: groups.map(([name, count], index) => ({ id: `${id}-${name}`, name, count, giftCount: giftCounts[index], giftNote: "", moneyNote: "" })),
   };
 }
 
@@ -115,11 +117,15 @@ function distributeGiftCounts(groupCount, totalGifts) {
 }
 
 function normalizeTable(table) {
-  if (table.guests.every((guest) => guest.giftCount !== undefined)) return table;
   const giftCounts = distributeGiftCounts(table.guests.length, parseGiftCount(table.gifts) ? table.guests.length : 0);
   return {
     ...table,
-    guests: table.guests.map((guest, index) => ({ ...guest, giftCount: giftCounts[index] ?? 0 })),
+    guests: table.guests.map((guest, index) => ({
+      ...guest,
+      giftCount: guest.giftCount ?? giftCounts[index] ?? 0,
+      giftNote: guest.giftNote ?? "",
+      moneyNote: guest.moneyNote ?? "",
+    })),
   };
 }
 
@@ -127,7 +133,7 @@ function resetTableGiftCounts(table) {
   const giftCounts = distributeGiftCounts(table.guests.length, parseGiftCount(table.gifts) ? table.guests.length : 0);
   return {
     ...table,
-    guests: table.guests.map((guest, index) => ({ ...guest, giftCount: giftCounts[index] ?? 0 })),
+    guests: table.guests.map((guest, index) => ({ ...guest, giftCount: giftCounts[index] ?? 0, giftNote: guest.giftNote ?? "", moneyNote: guest.moneyNote ?? "" })),
   };
 }
 
@@ -138,7 +144,7 @@ function normalizeTables(tables) {
 function normalizeStagingItems(items) {
   return items.map((item) => ({
     ...item,
-    guests: item.guests.map((guest) => ({ ...guest, giftCount: guest.giftCount ?? 1 })),
+    guests: item.guests.map((guest) => ({ ...guest, giftCount: guest.giftCount ?? 1, giftNote: guest.giftNote ?? "", moneyNote: guest.moneyNote ?? "" })),
   }));
 }
 
@@ -151,17 +157,27 @@ function tableGiftText(table) {
   return count ? `${count} 份礼` : "无礼份标注";
 }
 
+function tableCustomNote(table) {
+  return String(table.note || "")
+    .replace(/(?:缺|超)\s*\d+\s*人/g, "")
+    .trim();
+}
+
 function tableNoteText(table) {
   const count = tableCount(table);
-  if (table.note.includes("备")) return table.note || "备桌";
-  if (count > table.capacity) return `超 ${count - table.capacity} 人`;
-  if (count < table.capacity) return `缺 ${table.capacity - count} 人`;
-  return table.note.replace(/(?:缺|超)\s*\d+\s*人/g, "").trim();
+  const customNote = tableCustomNote(table);
+  if (table.id === "66" || customNote.includes("备")) return customNote || "备桌";
+  const automaticNote = count > table.capacity
+    ? `超 ${count - table.capacity} 人`
+    : count < table.capacity
+      ? `缺 ${table.capacity - count} 人`
+      : "";
+  return [automaticNote, customNote].filter(Boolean).join("｜");
 }
 
 function tableStatus(table) {
   const count = tableCount(table);
-  if (table.note.includes("备")) return "backup";
+  if (table.id === "66" || String(table.note || "").includes("备")) return "backup";
   if (count > table.capacity) return "over";
   if (count < table.capacity) return "short";
   return "ok";
@@ -182,39 +198,518 @@ function pinyinKeys(value) {
 function guestSearchText(table, guest) {
   return [
     guest.name,
-    table.id,
-    tableGiftText(table),
     tableNoteText(table),
+    guest.giftNote,
+    guest.moneyNote,
     ...pinyinKeys(guest.name),
   ].map(normalizeSearchKey).join(" ");
+}
+
+function tableMatchesNumericQuery(table, key) {
+  const tableNumber = String(Number(table.id));
+  const padded = key.padStart(2, "0");
+  return table.id === padded || tableNumber === key;
+}
+
+function guestMatchesQuery(table, guest, query) {
+  const key = normalizeSearchKey(query);
+  if (!key) return false;
+  if (/^\d+$/.test(key)) return tableMatchesNumericQuery(table, key);
+  return guestSearchText(table, guest).includes(key);
 }
 
 function guestText(guest) {
   return `${guest.name}${guest.count > 1 ? `（${guest.count}）` : ""}`;
 }
 
+function guestDetailText(guest) {
+  const meta = [`礼${guest.giftCount || 0}`];
+  if (guest.giftNote) meta.push(`备注${guest.giftNote}`);
+  if (guest.moneyNote) meta.push(`礼金${guest.moneyNote}`);
+  return `${guestText(guest)}{${meta.join("；")}}`;
+}
+
 function statusText(table) {
   return { ok: "正常", short: "缺人", over: "超员", backup: "备桌" }[tableStatus(table)];
 }
 
+function normalizeImportedGuestText(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .replace(/([）)])(?=[\u4e00-\u9fff])/g, "$1、")
+    .replace(/、+/g, "、")
+    .replace(/^、|、$/g, "");
+}
+
+function splitGuestTokens(value) {
+  const tokens = [];
+  let current = "";
+  let depth = 0;
+  Array.from(value).forEach((char) => {
+    if (char === "{" || char === "｛") depth += 1;
+    if (char === "}" || char === "｝") depth = Math.max(0, depth - 1);
+    if (depth === 0 && /[、，,；;]/.test(char)) {
+      if (current.trim()) tokens.push(current.trim());
+      current = "";
+      return;
+    }
+    current += char;
+  });
+  if (current.trim()) tokens.push(current.trim());
+  return tokens;
+}
+
+function parseGuestToken(token) {
+  const cleaned = token.trim().replace(/^、+|、+$/g, "");
+  if (!cleaned || cleaned === "空桌") return null;
+  const detailMatch = cleaned.match(/^(.*?)[{｛]([^}｝]*)[}｝]$/);
+  const body = detailMatch ? detailMatch[1].trim() : cleaned;
+  const detail = detailMatch ? detailMatch[2].trim() : "";
+  const numericMatch = body.match(/^(.*?)[（(](\d+)[）)]$/);
+  const parsed = { name: body, count: 1 };
+  if (numericMatch) {
+    const name = numericMatch[1].trim().replace(/^、+|、+$/g, "");
+    if (!name) return null;
+    parsed.name = name;
+    parsed.count = Number(numericMatch[2]);
+  }
+  if (!parsed.name) return null;
+  if (detail) {
+    detail.split(/[；;]/).forEach((part) => {
+      const giftMatch = part.match(/^礼\s*(\d+)$/);
+      const moneyMatch = part.match(/^礼金(.+)$/);
+      const noteMatch = part.match(/^备注(.+)$/);
+      if (giftMatch) parsed.giftCount = Number(giftMatch[1]);
+      if (moneyMatch) parsed.moneyNote = moneyMatch[1].trim();
+      if (noteMatch) parsed.giftNote = noteMatch[1].trim();
+    });
+  }
+  return parsed;
+}
+
+function parseImportedGuests(value) {
+  const normalized = normalizeImportedGuestText(value);
+  if (!normalized) return [];
+  return splitGuestTokens(normalized)
+    .map(parseGuestToken)
+    .filter(Boolean);
+}
+
+function parseImportedLine(line, currentById) {
+  const trimmed = line.trim().replace(/\n+/g, " ");
+  const match = trimmed.match(/^(\d{1,2})\s*号桌[（(]([^：:]*)[）)]?[：:](.+)$/);
+  if (!match) return null;
+  const id = match[1].padStart(2, "0");
+  const previous = currentById.get(id);
+  const header = match[2].replace(/[）)]$/, "");
+  const headerCount = Number(header.match(/^\s*(\d+)\s*\//)?.[1]);
+  const isBackup = /备/.test(header);
+  const capacity = Number(header.match(/\/\s*(\d+)/)?.[1]) || previous?.capacity || CAPACITY;
+  const parts = match[3].split(/[｜|]/).map((part) => part.trim()).filter(Boolean);
+  let guestPart = parts.shift() || "";
+  let giftText = parts.find((part) => /(?:\d+\s*份|无礼份)/.test(part)) || "无礼份标注";
+  const embeddedGift = guestPart.match(/(\d+)\s*份\s*礼?\s*$/);
+  if (embeddedGift) {
+    giftText = `${embeddedGift[1]} 份礼`;
+    guestPart = guestPart.slice(0, embeddedGift.index).trim();
+  }
+  const giftTotal = parseGiftCount(giftText);
+  const note = parts
+    .filter((part) => part !== giftText)
+    .filter((part) => !/^(?:缺|超)\s*\d+\s*人$/.test(part))
+    .join("｜");
+  const guests = parseImportedGuests(guestPart);
+  if (isBackup && headerCount === 0) {
+    const backupNames = guests.map(guestText).join("、");
+    const backupNote = [note || "备桌", backupNames && `暂列：${backupNames}`].filter(Boolean).join("｜");
+    return {
+      id,
+      gifts: "无礼份标注",
+      note: backupNote,
+      capacity,
+      guests: [],
+    };
+  }
+  const giftCounts = distributeGiftCounts(guests.length, giftTotal);
+  const hasGuestGiftDetails = guests.some((guest) => guest.giftCount !== undefined || guest.giftNote);
+  return {
+    id,
+    gifts: giftTotal ? `${giftTotal} 份礼` : "无礼份标注",
+    note,
+    capacity,
+    guests: guests.map((guest, index) => ({
+      id: `${id}-${guest.name}-${index}`,
+      name: guest.name,
+      count: guest.count,
+      giftCount: hasGuestGiftDetails ? (guest.giftCount ?? 0) : (giftCounts[index] ?? 0),
+      giftNote: guest.giftNote || "",
+      moneyNote: guest.moneyNote || "",
+    })),
+  };
+}
+
+function splitImportedTableBlocks(text) {
+  const source = String(text || "").replace(/\r/g, "\n");
+  const starts = [...source.matchAll(/\d{1,2}\s*号桌[（(]/g)].map((match) => match.index);
+  return starts.map((start, index) => {
+    const end = starts[index + 1] ?? source.length;
+    return source.slice(start, end).trim();
+  });
+}
+
+function parseImportedSeatingText(text, currentTables) {
+  const currentById = new Map(currentTables.map((table) => [table.id, table]));
+  const blocks = splitImportedTableBlocks(text);
+  const parsed = blocks
+    .map((line) => parseImportedLine(line, currentById))
+    .filter(Boolean);
+  if (!parsed.length) {
+    throw new Error("没有识别到桌号行。请粘贴包含“01 号桌：...”的名单。");
+  }
+  const parsedById = new Map(parsed.map((table) => [table.id, table]));
+  const merged = currentTables.map((table) => parsedById.get(table.id) || table);
+  parsed.forEach((table) => {
+    if (!currentById.has(table.id)) merged.push(table);
+  });
+  return normalizeTables(merged);
+}
+
 function tableRows(sortedTables, staging) {
-  const rows = [["桌号", "宾客/组", "人数", "本户礼份", "当前人数", "容量", "状态", "本桌礼份", "备注"]];
+  const rows = [["桌号", "宾客/组", "人数", "本户礼份", "伴手礼备注", "礼金备注", "当前人数", "容量", "状态", "本桌礼份", "备注"]];
   sortedTables.forEach((table) => {
     const count = tableCount(table);
     if (!table.guests.length) {
-      rows.push([table.id, "空桌", 0, 0, count, table.capacity, statusText(table), tableGiftText(table), tableNoteText(table)]);
+      rows.push([table.id, "空桌", 0, 0, "", "", count, table.capacity, statusText(table), tableGiftText(table), tableNoteText(table)]);
       return;
     }
     table.guests.forEach((guest) => {
-      rows.push([table.id, guest.name, guest.count, guest.giftCount ?? 0, count, table.capacity, statusText(table), tableGiftText(table), tableNoteText(table)]);
+      rows.push([table.id, guest.name, guest.count, guest.giftCount ?? 0, guest.giftNote || "", guest.moneyNote || "", count, table.capacity, statusText(table), tableGiftText(table), tableNoteText(table)]);
     });
   });
   staging.forEach((item) => {
     item.guests.forEach((guest) => {
-      rows.push(["暂存区", guest.name, guest.count, guest.giftCount ?? 0, "", "", "暂存", "", item.label]);
+      rows.push(["暂存区", guest.name, guest.count, guest.giftCount ?? 0, guest.giftNote || "", guest.moneyNote || "", "", "", "暂存", "", item.label]);
     });
   });
   return rows;
+}
+
+function guestEntries(sortedTables, staging = []) {
+  const tableEntries = sortedTables.flatMap((table) =>
+    table.guests.map((guest, index) => ({
+      ...guest,
+      rowNo: index + 1,
+      tableId: table.id,
+      tableCount: tableCount(table),
+      tableCapacity: table.capacity,
+      tableStatus: statusText(table),
+      tableNote: tableNoteText(table),
+      giftNote: guest.giftNote || "",
+      moneyNote: guest.moneyNote || "",
+      source: `${table.id} 号桌`,
+    }))
+  );
+  const stagingEntries = staging.flatMap((item) =>
+    item.guests.map((guest, index) => ({
+      ...guest,
+      rowNo: index + 1,
+      tableId: "暂存区",
+      tableCount: "",
+      tableCapacity: "",
+      tableStatus: "暂存",
+      tableNote: item.label,
+      giftNote: guest.giftNote || "",
+      moneyNote: guest.moneyNote || "",
+      source: item.label,
+    }))
+  );
+  return [...tableEntries, ...stagingEntries];
+}
+
+function guestInitial(guest) {
+  const key = pinyin(guest.name, { pattern: "first", toneType: "none" })
+    .replace(/[^a-zA-Z]/g, "")
+    .slice(0, 1)
+    .toUpperCase();
+  return key || "#";
+}
+
+function sortGuestsByPinyin(entries) {
+  return [...entries].sort((a, b) => {
+    const aInitials = pinyin(a.name, { pattern: "first", toneType: "none" }).toLowerCase();
+    const bInitials = pinyin(b.name, { pattern: "first", toneType: "none" }).toLowerCase();
+    if (aInitials !== bInitials) return aInitials.localeCompare(bInitials);
+    return Number(a.tableId) - Number(b.tableId) || a.name.localeCompare(b.name, "zh-Hans-CN");
+  });
+}
+
+function printDocument(title, subtitle, bodyHtml) {
+  return `<!doctype html>
+  <html lang="zh-CN">
+    <head>
+      <meta charset="utf-8" />
+      <title>${escapeHtml(title)}</title>
+      <style>
+        @page { size: A4; margin: 12mm; }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          color: #111;
+          font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+          font-size: 11px;
+          line-height: 1.35;
+        }
+        h1 {
+          margin: 0 0 4px;
+          font-size: 22px;
+          line-height: 1.2;
+        }
+        .subtitle {
+          margin: 0 0 10px;
+          color: #555;
+          font-size: 11px;
+        }
+        .printToolbar {
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          margin: -12mm -12mm 12px;
+          padding: 10px 12mm;
+          background: #fff8f3;
+          border-bottom: 1px solid #eaded6;
+        }
+        .printToolbar strong { font-size: 14px; }
+        .printToolbar button {
+          min-height: 34px;
+          padding: 0 14px;
+          border: 1px solid #c94262;
+          border-radius: 7px;
+          background: #c94262;
+          color: #fff;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .sectionTitle {
+          margin: 14px 0 6px;
+          padding: 5px 8px;
+          background: #f2f2f2;
+          border-left: 4px solid #111;
+          font-size: 14px;
+          font-weight: 800;
+          break-after: avoid;
+        }
+        .meta {
+          color: #444;
+          font-size: 10px;
+          font-weight: 600;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          break-inside: auto;
+        }
+        th,
+        td {
+          border: 1px solid #aaa;
+          padding: 5px 6px;
+          vertical-align: middle;
+          word-break: break-word;
+        }
+        th {
+          background: #efefef;
+          font-size: 10px;
+          text-align: left;
+        }
+        tr { break-inside: avoid; }
+        .blankRow td { height: 28px; }
+        .center { text-align: center; }
+        .muted { color: #777; }
+        .checkbox { font-size: 15px; line-height: 1; }
+        .signature { min-height: 24px; }
+        .pageBreak { break-before: page; }
+        .indexGroup {
+          margin: 12px 0 4px;
+          font-size: 16px;
+          font-weight: 900;
+          break-after: avoid;
+        }
+        .compact td,
+        .compact th { padding: 4px 5px; }
+        @media print {
+          .printToolbar { display: none; }
+          body { font-size: 10.5px; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="printToolbar">
+        <strong>${escapeHtml(title)}</strong>
+        <button onclick="window.print()">打印 / 另存 PDF</button>
+      </div>
+      <h1>${escapeHtml(title)}</h1>
+      <p class="subtitle">${escapeHtml(subtitle)}</p>
+      ${bodyHtml}
+    </body>
+  </html>`;
+}
+
+function registrationBlankRows(startIndex, count) {
+  return Array.from({ length: count }, (_, offset) => `
+    <tr class="blankRow">
+      <td class="center">${startIndex + offset}</td>
+      <td></td>
+      <td class="center"></td>
+      <td class="center"></td>
+      <td class="center checkbox">□</td>
+      <td class="center checkbox">□</td>
+      <td class="signature"></td>
+      <td></td>
+    </tr>`);
+}
+
+function registrationPrintHtml(sortedTables, staging, stats) {
+  const body = sortedTables.map((table) => {
+    const guestRows = table.guests.map((guest, index) => {
+      const giftCell = guest.giftCount ? String(guest.giftCount) : (guest.giftNote || "");
+      return `
+        <tr>
+          <td class="center">${index + 1}</td>
+          <td><strong>${escapeHtml(guestText(guest))}</strong></td>
+          <td class="center">${guest.count}</td>
+          <td class="center">${escapeHtml(giftCell)}</td>
+          <td class="center checkbox">□</td>
+          <td class="center checkbox">${guest.giftCount ? "□" : "—"}</td>
+          <td class="signature"></td>
+          <td>${escapeHtml(guest.giftNote || "")}</td>
+        </tr>`;
+    });
+    const blankCount = tableStatus(table) === "backup" ? Math.max(10, table.capacity) : 2;
+    const rows = [
+      ...guestRows,
+      ...registrationBlankRows(table.guests.length + 1, blankCount),
+    ];
+    return `
+      <h2 class="sectionTitle">${escapeHtml(table.id)} 号桌 <span class="meta">${tableCount(table)}/${table.capacity} 人｜${escapeHtml(tableGiftText(table))}｜${escapeHtml(tableNoteText(table) || statusText(table))}</span></h2>
+      <table>
+        <colgroup>
+          <col style="width: 7%" />
+          <col style="width: 22%" />
+          <col style="width: 8%" />
+          <col style="width: 14%" />
+          <col style="width: 10%" />
+          <col style="width: 12%" />
+          <col style="width: 14%" />
+          <col style="width: 13%" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>序号</th>
+            <th>姓名/户名</th>
+            <th>人数</th>
+            <th>伴手礼份数</th>
+            <th>签到</th>
+            <th>已领伴手礼</th>
+            <th>领取签字</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>`;
+  }).join("");
+  const stagingBody = staging.length ? `
+    <h2 class="sectionTitle">暂存区</h2>
+    <table><tbody>${staging.flatMap((item) => item.guests.map((guest) => `<tr><td>${escapeHtml(item.label)}</td><td>${escapeHtml(guestText(guest))}</td><td class="center">${guest.count}</td><td class="center">${escapeHtml(guest.giftCount ? String(guest.giftCount) : (guest.giftNote || ""))}</td><td>${escapeHtml(guest.giftNote || "")}</td></tr>`)).join("")}</tbody></table>
+  ` : "";
+  return printDocument(
+    "婚礼主登记表（签到 + 伴手礼）",
+    `合计 ${stats.seats} 位｜${sortedTables.length} 桌｜${stats.gifts} 份伴手礼｜${stats.warnings} 桌需确认`,
+    body + stagingBody
+  );
+}
+
+function moneyPrintHtml(sortedTables, staging, stats, order = "table") {
+  const entries = order === "initial"
+    ? sortGuestsByPinyin(guestEntries(sortedTables, staging))
+    : guestEntries(sortedTables, staging);
+  const rows = entries.map((guest, index) => `
+    <tr>
+      <td class="center">${index + 1}</td>
+      <td>${escapeHtml(guest.tableId)}</td>
+      <td><strong>${escapeHtml(guestText(guest))}</strong></td>
+      <td class="center">${guest.count}</td>
+      <td></td>
+      <td class="center">□ 红包&nbsp;&nbsp;□ 转账</td>
+      <td></td>
+      <td>${escapeHtml(guest.moneyNote || "")}</td>
+    </tr>`).join("");
+  return printDocument(
+    order === "initial" ? "礼金登记表（首字母）" : "礼金登记表（按桌号）",
+    `${order === "initial" ? "按姓名首字母排序" : "按桌号顺序"}｜与签到点同步登记，不对外展示｜合计 ${stats.seats} 位｜${sortedTables.length} 桌`,
+    `<table>
+      <colgroup>
+        <col style="width: 7%" />
+        <col style="width: 9%" />
+        <col style="width: 22%" />
+        <col style="width: 8%" />
+        <col style="width: 14%" />
+        <col style="width: 16%" />
+        <col style="width: 10%" />
+        <col style="width: 14%" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>序号</th>
+          <th>桌号</th>
+          <th>姓名/户名</th>
+          <th>人数</th>
+          <th>礼金金额</th>
+          <th>方式</th>
+          <th>经手人</th>
+          <th>备注</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`
+  );
+}
+
+function indexPrintHtml(sortedTables, staging, stats) {
+  const entries = sortGuestsByPinyin(guestEntries(sortedTables, staging));
+  let current = "";
+  const body = entries.map((guest) => {
+    const initial = guestInitial(guest);
+    const heading = initial !== current ? `<h2 class="indexGroup">${escapeHtml(initial)}</h2>` : "";
+    current = initial;
+    return `${heading}
+      <table class="compact">
+        <colgroup>
+          <col style="width: 24%" />
+          <col style="width: 11%" />
+          <col style="width: 9%" />
+          <col style="width: 13%" />
+          <col style="width: 43%" />
+        </colgroup>
+        <tbody>
+          <tr>
+            <td><strong>${escapeHtml(guestText(guest))}</strong></td>
+            <td>${escapeHtml(guest.tableId)}</td>
+            <td class="center">${guest.count} 人</td>
+            <td class="center">${guest.giftCount || 0} 份礼</td>
+            <td>${escapeHtml([guest.giftNote, guest.tableNote].filter(Boolean).join("｜"))}</td>
+          </tr>
+        </tbody>
+      </table>`;
+  }).join("");
+  return printDocument(
+    "姓名首字母查询表",
+    `按姓名首字母排序，用于现场快速查桌号｜合计 ${stats.seats} 位｜${stats.gifts} 份伴手礼`,
+    body
+  );
 }
 
 function textSummary(sortedTables, staging, stats) {
@@ -224,14 +719,14 @@ function textSummary(sortedTables, staging, stats) {
     "",
   ];
   sortedTables.forEach((table) => {
-    const guests = table.guests.length ? table.guests.map(guestText).join("、") : "空桌";
+    const guests = table.guests.length ? table.guests.map(guestDetailText).join("、") : "空桌";
     const extra = [tableGiftText(table), tableNoteText(table)].filter(Boolean).join("｜");
     lines.push(`${table.id} 号桌（${tableCount(table)}/${table.capacity}，${statusText(table)}）：${guests}${extra ? `｜${extra}` : ""}`);
   });
   if (staging.length) {
     lines.push("", "暂存区");
     staging.forEach((item) => {
-      lines.push(`${item.label}：${item.guests.map(guestText).join("、")}`);
+      lines.push(`${item.label}：${item.guests.map(guestDetailText).join("、")}`);
     });
   }
   return lines.join("\n");
@@ -440,6 +935,7 @@ function loadInitialStaging() {
 function App() {
   const [tables, setTables] = useState(loadInitialTables);
   const [staging, setStaging] = useState(loadInitialStaging);
+  const [routeHash, setRouteHash] = useState(window.location.hash);
   const [selectedId, setSelectedId] = useState(null);
   const [query, setQuery] = useState("");
   const [targetId, setTargetId] = useState("66");
@@ -447,24 +943,39 @@ function App() {
   const [showGuests, setShowGuests] = useState(false);
   const [mobileView, setMobileView] = useState("list");
   const [copyFeedback, setCopyFeedback] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState("");
 
   const selected = selectedId ? tables.find((table) => table.id === selectedId) : null;
   const sortedTables = useMemo(() => [...tables].sort((a, b) => Number(a.id) - Number(b.id)), [tables]);
   const stats = useMemo(() => {
     const stagedSeats = staging.reduce((sum, item) => sum + item.guests.reduce((guestSum, guest) => guestSum + guest.count, 0), 0);
+    const stagedGifts = staging.reduce((sum, item) => sum + item.guests.reduce((guestSum, guest) => guestSum + (Number(guest.giftCount) || 0), 0), 0);
     const seats = tables.reduce((sum, table) => sum + tableCount(table), 0) + stagedSeats;
+    const gifts = tables.reduce((sum, table) => sum + tableGiftCount(table), 0) + stagedGifts;
     const warnings = tables.filter((table) => ["short", "over"].includes(tableStatus(table))).length;
-    return { seats, warnings, tables: tables.length };
+    return { seats, gifts, warnings, tables: tables.length };
   }, [tables, staging]);
   const matches = useMemo(() => {
     const key = normalizeSearchKey(query);
     if (!key) return [];
     return sortedTables.flatMap((table) =>
       table.guests
-        .filter((guest) => guestSearchText(table, guest).includes(key))
+        .filter((guest) => guestMatchesQuery(table, guest, key))
         .map((guest) => ({ ...guest, tableId: table.id }))
     );
   }, [query, sortedTables]);
+
+  useEffect(() => {
+    const handleHashChange = () => setRouteHash(window.location.hash);
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  if (routeHash === "#/search") {
+    return <OnsiteSearchPage tables={sortedTables} stats={stats} />;
+  }
 
   function persist(next) {
     setTables(next);
@@ -484,6 +995,12 @@ function App() {
     const nextCapacity = Math.max(1, Number(capacity) || 1);
     persist(tables.map((table) => (
       table.id === tableId ? { ...table, capacity: nextCapacity } : table
+    )));
+  }
+
+  function updateTableNote(tableId, note) {
+    persist(tables.map((table) => (
+      table.id === tableId ? { ...table, note } : table
     )));
   }
 
@@ -545,6 +1062,28 @@ function App() {
     }).map((table) => {
       if (table.id !== toId || !moving) return table;
       return { ...table, guests: [...table.guests, { ...moving, id: `${toId}-${moving.name}-${Date.now()}` }] };
+    });
+    persist(next);
+    setSelectedId(toId);
+    setPickedGuestId(null);
+  }
+
+  function moveGuestBefore(guestId, fromId, toId, beforeGuestId) {
+    if (!guestId || !fromId || !toId || !beforeGuestId || guestId === beforeGuestId) return;
+    let moving;
+    const next = tables.map((table) => {
+      if (table.id !== fromId) return table;
+      moving = table.guests.find((guest) => guest.id === guestId);
+      return { ...table, guests: table.guests.filter((guest) => guest.id !== guestId) };
+    }).map((table) => {
+      if (table.id !== toId || !moving) return table;
+      const movedGuest = fromId === toId
+        ? moving
+        : { ...moving, id: `${toId}-${moving.name}-${Date.now()}` };
+      const insertIndex = table.guests.findIndex((guest) => guest.id === beforeGuestId);
+      const guests = [...table.guests];
+      guests.splice(insertIndex >= 0 ? insertIndex : guests.length, 0, movedGuest);
+      return { ...table, guests };
     });
     persist(next);
     setSelectedId(toId);
@@ -717,6 +1256,23 @@ function App() {
     }
   }
 
+  function openPrintPreview(kind) {
+    const documents = {
+      registration: registrationPrintHtml(sortedTables, staging, stats),
+      money: moneyPrintHtml(sortedTables, staging, stats),
+      moneyInitial: moneyPrintHtml(sortedTables, staging, stats, "initial"),
+      index: indexPrintHtml(sortedTables, staging, stats),
+    };
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      showCopied("浏览器拦截了打印窗口");
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(documents[kind]);
+    printWindow.document.close();
+  }
+
   function reset() {
     localStorage.removeItem("wedding-seating-staging-v1");
     const next = normalizeTables(seedTables);
@@ -725,6 +1281,25 @@ function App() {
     setStaging([]);
     setSelectedId(null);
     setPickedGuestId(null);
+  }
+
+  function importSeatingText() {
+    try {
+      const next = parseImportedSeatingText(importText, sortedTables);
+      persist(next);
+      persistStaging([]);
+      setSelectedId(null);
+      setPickedGuestId(null);
+      setImportOpen(false);
+      setImportText("");
+      setImportError("");
+      const importedSeats = next.reduce((sum, table) => sum + tableCount(table), 0);
+      const importedGifts = next.reduce((sum, table) => sum + tableGiftCount(table), 0);
+      const importedWarnings = next.filter((table) => ["short", "over"].includes(tableStatus(table))).length;
+      showCopied(`已导入：${importedSeats} 位，${importedGifts} 份礼，${importedWarnings} 桌需确认`);
+    } catch (error) {
+      setImportError(error.message || "导入失败，请检查文本格式");
+    }
   }
 
   return (
@@ -736,6 +1311,7 @@ function App() {
         </div>
         <div className="toolbar">
           <div className="stat"><Users size={17} /> {stats.seats} 位</div>
+          <div className="stat"><Gift size={17} /> {stats.gifts} 份礼</div>
           <div className="stat warn">{stats.warnings} 桌需确认</div>
           <button
             onClick={() => setShowGuests((current) => !current)}
@@ -743,7 +1319,15 @@ function App() {
           >
             <ListTree size={16} /> {showGuests ? "隐藏每桌人" : "显示每桌人"}
           </button>
+          <button onClick={() => setImportOpen(true)} className="ghost"><Upload size={16} /> 导入名单</button>
+          <button onClick={() => { window.location.hash = "#/search"; }} className="ghost"><Search size={16} /> 现场查询页</button>
           <button onClick={reset} className="ghost"><RotateCcw size={16} /> 重置</button>
+          <div className="printGroup">
+            <button className="ghost" onClick={() => openPrintPreview("registration")}><Printer size={16} /> 主登记表</button>
+            <button className="ghost" onClick={() => openPrintPreview("money")}><Printer size={16} /> 礼金表按桌</button>
+            <button className="ghost" onClick={() => openPrintPreview("moneyInitial")}><Printer size={16} /> 礼金表首字母</button>
+            <button className="ghost" onClick={() => openPrintPreview("index")}><Printer size={16} /> 首字母索引</button>
+          </div>
           <div className="exportGroup">
             <button className="ghost" onClick={copyTextExport}><Clipboard size={16} /> 复制文字</button>
             <button className="ghost" onClick={copyTableExport}><FileSpreadsheet size={16} /> 复制表格</button>
@@ -782,7 +1366,7 @@ function App() {
               className={mobileView === "map" ? "active" : ""}
               onClick={() => setMobileView("map")}
             >
-              <Map size={16} /> 平面图
+              <MapIcon size={16} /> 平面图
             </button>
           </div>
           <SearchResults query={query} matches={matches} onSelectTable={setSelectedId} compact />
@@ -860,6 +1444,15 @@ function App() {
             <Metric label="备注" value={tableNoteText(selected) || "无"} />
           </div>
 
+          <label className="tableNoteEdit">
+            手动备注
+            <textarea
+              value={tableCustomNote(selected)}
+              onChange={(e) => updateTableNote(selected.id, e.target.value)}
+              placeholder="例如：老人优先、和 12 桌合领伴手礼、现场确认"
+            />
+          </label>
+
           <div className="moveBox">
             <select value={targetId} onChange={(e) => setTargetId(e.target.value)}>
               {sortedTables.map((table) => <option key={table.id} value={table.id}>{table.id} 号桌 · {tableCount(table)} 人</option>)}
@@ -886,6 +1479,7 @@ function App() {
             pickedGuestId={pickedGuestId}
             setPickedGuestId={setPickedGuestId}
             moveGuest={moveGuest}
+            moveGuestBefore={moveGuestBefore}
             clearTable={clearTable}
             updateGuest={updateGuest}
             addGuest={addGuest}
@@ -896,6 +1490,36 @@ function App() {
         </aside>
         )}
       </section>
+
+      {importOpen && (
+        <div className="modalBackdrop" role="presentation" onMouseDown={() => setImportOpen(false)}>
+          <section className="importModal" role="dialog" aria-modal="true" aria-label="导入名单" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modalHeader">
+              <div>
+                <h2>导入名单</h2>
+                <p>粘贴“婚礼排桌名单”整段文本，导入后会覆盖当前桌表并清空暂存区。</p>
+              </div>
+              <button className="closeInspector" onClick={() => setImportOpen(false)} aria-label="关闭导入">
+                <X size={17} />
+              </button>
+            </div>
+            <textarea
+              className="importTextarea"
+              value={importText}
+              onChange={(e) => {
+                setImportText(e.target.value);
+                setImportError("");
+              }}
+              placeholder="例如：01 号桌（13/15，缺人）：新人一家（13）｜无礼份标注｜缺 2 人"
+            />
+            {importError && <p className="importError">{importError}</p>}
+            <div className="modalActions">
+              <button className="ghost" onClick={() => setImportOpen(false)}>取消</button>
+              <button onClick={importSeatingText} disabled={!importText.trim()}><Upload size={16} /> 导入并覆盖</button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -908,6 +1532,71 @@ function readDragData(event) {
     tableId: event.dataTransfer.getData("tableId"),
     stagingId: event.dataTransfer.getData("stagingId"),
   };
+}
+
+function OnsiteSearchPage({ tables, stats }) {
+  const [onsiteQuery, setOnsiteQuery] = useState("");
+  const entries = useMemo(() => tables.flatMap((table) =>
+    table.guests.map((guest) => ({
+      ...guest,
+      table,
+      tableId: table.id,
+      tableNote: tableNoteText(table),
+      giftNote: guest.giftNote || "",
+    }))
+  ), [tables]);
+  const results = useMemo(() => {
+    const key = normalizeSearchKey(onsiteQuery);
+    if (!key) return [];
+    return entries.filter((entry) => guestMatchesQuery(entry.table, entry, key));
+  }, [entries, onsiteQuery]);
+  const visible = onsiteQuery.trim() ? results : sortGuestsByPinyin(entries).slice(0, 24);
+
+  return (
+    <main className="onsitePage">
+      <header className="onsiteHeader">
+        <div>
+          <h1>现场查人</h1>
+          <p>只读查询页，支持姓名、拼音首字母和桌号。用于当天快速确认客人坐哪桌。</p>
+        </div>
+      </header>
+
+      <section className="onsiteSearchBox">
+        <label>
+          <Search size={20} />
+          <input
+            autoFocus
+            value={onsiteQuery}
+            onChange={(event) => setOnsiteQuery(event.target.value)}
+            placeholder="输入姓名、首字母或桌号，例如 lh / 李华 / 11"
+          />
+        </label>
+        <div className="onsiteStats">
+          <span>{stats.seats} 位</span>
+          <span>{stats.gifts} 份伴手礼</span>
+          <span>{stats.tables} 桌</span>
+        </div>
+      </section>
+
+      <section className="onsiteResults">
+        <h2>{onsiteQuery.trim() ? `找到 ${results.length} 条` : "常用名单预览"}</h2>
+        {visible.length ? visible.map((guest) => (
+          <article key={`${guest.tableId}-${guest.id}`} className="onsiteResultCard">
+            <div className="onsiteTableBadge">{guest.tableId}</div>
+            <div className="onsiteGuestInfo">
+              <strong>{guestText(guest)}</strong>
+              <span>{guest.tableId} 号桌｜{guest.count} 人｜{guest.giftCount || 0} 份礼</span>
+              {guest.giftNote && <em>伴手礼：{guest.giftNote}</em>}
+              {!guest.giftNote && guest.giftCount === 0 && <em>伴手礼：本行不单独领取</em>}
+              {guest.tableNote && <small>{guest.tableNote}</small>}
+            </div>
+          </article>
+        )) : (
+          <div className="onsiteEmpty">没找到匹配客人，可以试试姓名首字母或桌号。</div>
+        )}
+      </section>
+    </main>
+  );
 }
 
 function MobileTableList({ tables, selectedId, onSelectTable }) {
@@ -1060,6 +1749,7 @@ function GuestList({
   pickedGuestId,
   setPickedGuestId,
   moveGuest,
+  moveGuestBefore,
   clearTable,
   updateGuest,
   addGuest,
@@ -1082,6 +1772,15 @@ function GuestList({
             key={guest.id}
             className={`guestRow ${pickedGuestId === guest.id ? "picked" : ""}`}
             onClick={() => setPickedGuestId(guest.id)}
+            onDragOver={(e) => {
+              e.preventDefault();
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const data = readDragData(e);
+              if (data.type === "guest") moveGuestBefore(data.guestId, data.fromId, table.id, guest.id);
+            }}
           >
             <span
               className="num"
@@ -1121,6 +1820,20 @@ function GuestList({
               />
               份
             </label>
+            <input
+              className="giftNoteInput"
+              value={guest.giftNote || ""}
+              onChange={(e) => updateGuest(table.id, guest.id, { giftNote: e.target.value })}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="伴手礼备注，如：礼由父母桌张三领"
+            />
+            <input
+              className="moneyNoteInput"
+              value={guest.moneyNote || ""}
+              onChange={(e) => updateGuest(table.id, guest.id, { moneyNote: e.target.value })}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="礼金备注，如：不收礼金"
+            />
             <select value={targetId} onClick={(e) => e.stopPropagation()} onChange={(e) => moveGuest(guest.id, table.id, e.target.value)}>
               {tables.filter((item) => item.id !== table.id).map((item) => <option key={item.id} value={item.id}>移到 {item.id}</option>)}
             </select>
@@ -1133,7 +1846,7 @@ function GuestList({
           </div>
         )) : <div className="empty">这桌暂时没有宾客，可从其他桌拖拽过来。</div>}
       </div>
-      <p className="hint">可拖动宾客行到左侧任意桌，也可用每行右侧下拉框直接移桌。</p>
+      <p className="hint">拖动左侧序号可调整顺序；伴手礼备注写谁领，礼金备注可写“不收礼金”。</p>
     </section>
   );
 }
