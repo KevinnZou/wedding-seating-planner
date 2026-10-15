@@ -27,7 +27,7 @@ import defaultStaging from "./defaultStaging.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
-const DEFAULT_DATA_VERSION = "2026-10-15-final-seating-v1";
+const DEFAULT_DATA_VERSION = "2026-10-15-final-seating-v2";
 const PUBLIC_GUEST_SEARCH_URL = "https://kevinnzou.github.io/wedding-seating-planner/#/guest-search";
 
 const tablePositions = [
