@@ -398,16 +398,16 @@
         "moneyNote": ""
       },
       {
-        "id": "08-徐勇一家-1",
-        "name": "徐勇一家",
+        "id": "08-许勇一家-1",
+        "name": "许勇一家",
         "count": 2,
         "giftCount": 0,
         "giftNote": "02钱国女",
         "moneyNote": ""
       },
       {
-        "id": "08-濮凡-2",
-        "name": "濮凡",
+        "id": "08-吴世峰-2",
+        "name": "吴世峰",
         "count": 1,
         "giftCount": 1,
         "giftNote": "",
@@ -497,7 +497,7 @@
   },
   {
     "id": "10",
-    "gifts": "6 份礼",
+    "gifts": "5 份礼",
     "note": "可能空1",
     "capacity": 10,
     "guests": [
@@ -529,14 +529,6 @@
         "id": "10-宋冬冬夫妻-3",
         "name": "宋冬冬夫妻",
         "count": 2,
-        "giftCount": 1,
-        "giftNote": "",
-        "moneyNote": ""
-      },
-      {
-        "id": "10-吴世峰-4",
-        "name": "吴世峰",
-        "count": 1,
         "giftCount": 1,
         "giftNote": "",
         "moneyNote": ""
@@ -646,8 +638,8 @@
         "moneyNote": ""
       },
       {
-        "id": "12-徐勤根-2",
-        "name": "徐勤根",
+        "id": "12-徐勤耕-2",
+        "name": "徐勤耕",
         "count": 1,
         "giftCount": 1,
         "giftNote": "",
@@ -1054,8 +1046,8 @@
         "moneyNote": ""
       },
       {
-        "id": "20-余沪兵-1",
-        "name": "余沪兵",
+        "id": "20-余沪宾-1",
+        "name": "余沪宾",
         "count": 1,
         "giftCount": 1,
         "giftNote": "",
@@ -1414,8 +1406,8 @@
         "moneyNote": ""
       },
       {
-        "id": "28-郑祥怀-4",
-        "name": "郑祥怀",
+        "id": "28-郑祥槐-4",
+        "name": "郑祥槐",
         "count": 1,
         "giftCount": 1,
         "giftNote": "",
@@ -1750,8 +1742,8 @@
         "moneyNote": ""
       },
       {
-        "id": "35-谢正田-3",
-        "name": "谢正田",
+        "id": "35-汪庆苏-3",
+        "name": "汪庆苏",
         "count": 1,
         "giftCount": 1,
         "giftNote": "",
