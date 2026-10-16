@@ -27,7 +27,7 @@ import defaultStaging from "./defaultStaging.json";
 
 const CAPACITY = 10;
 const GIFT_MODEL_VERSION = "household-v2";
-const DEFAULT_DATA_VERSION = "2026-10-15-final-seating-v2";
+const DEFAULT_DATA_VERSION = "2026-10-16-final-seating-v1";
 const PUBLIC_GUEST_SEARCH_URL = "https://kevinnzou.github.io/wedding-seating-planner/#/guest-search";
 
 const tablePositions = [
@@ -64,6 +64,7 @@ const tablePositions = [
   ["35", 30, 84, "39"],
   ["36", 72, 66, "35"],
   ["37", 20, 84, "38"],
+  ["39", 10, 84, "备"],
   ["50", 82, 66, "36"],
   ["52", 92, 66, "37"],
   ["56", 62, 84, "51"],
@@ -170,7 +171,7 @@ function tableCustomNote(table) {
 function tableNoteText(table) {
   const count = tableCount(table);
   const customNote = tableCustomNote(table);
-  if (table.id === "66" || customNote.includes("备")) return customNote || "备桌";
+  if (customNote.includes("备")) return customNote || "备桌";
   const automaticNote = count > table.capacity
     ? `超 ${count - table.capacity} 人`
     : count < table.capacity
@@ -181,7 +182,7 @@ function tableNoteText(table) {
 
 function tableStatus(table) {
   const count = tableCount(table);
-  if (table.id === "66" || String(table.note || "").includes("备")) return "backup";
+  if (String(table.note || "").includes("备")) return "backup";
   if (count > table.capacity) return "over";
   if (count < table.capacity) return "short";
   return "ok";
@@ -497,14 +498,14 @@ function sortGuestsByPinyin(entries) {
   });
 }
 
-function printDocument(title, subtitle, bodyHtml) {
+function printDocument(title, subtitle, bodyHtml, defaultOrientation = "landscape") {
   return `<!doctype html>
   <html lang="zh-CN">
     <head>
       <meta charset="utf-8" />
       <title>${escapeHtml(title)}</title>
       <style>
-        @page { size: A4; margin: 12mm; }
+        @page { size: A4 landscape; margin: 12mm; }
         * { box-sizing: border-box; }
         body {
           margin: 0;
@@ -587,27 +588,89 @@ function printDocument(title, subtitle, bodyHtml) {
         .signature { min-height: 24px; }
         .pageBreak { break-before: page; }
         .indexGroup {
-          margin: 12px 0 4px;
-          font-size: 16px;
+          margin: 20px 0 8px;
+          padding: 8px 10px;
+          border-top: 3px solid #111;
+          border-bottom: 1px solid #111;
+          font-size: 18pt;
           font-weight: 900;
           break-after: avoid;
         }
+        .initialDivider { break-after: avoid; }
+        .initialDivider td {
+          padding: 10px 8px;
+          border-top: 3px solid #111;
+          border-bottom: 2px solid #111;
+          font-size: 18pt;
+          font-weight: 900;
+        }
         .compact td,
         .compact th { padding: 4px 5px; }
+        .guestIndex td { font-size: 14pt; line-height: 1.5; }
+        html[data-orientation="portrait"] .registrationTable .signature,
+        html[data-orientation="portrait"] .registrationTable col:nth-child(7) { display: none; }
+        html[data-orientation="portrait"] .registrationTable col:nth-child(1) { width: 7% !important; }
+        html[data-orientation="portrait"] .registrationTable col:nth-child(2) { width: 25% !important; }
+        html[data-orientation="portrait"] .registrationTable col:nth-child(3) { width: 7% !important; }
+        html[data-orientation="portrait"] .registrationTable col:nth-child(4) { width: 19% !important; }
+        html[data-orientation="portrait"] .registrationTable col:nth-child(5) { width: 9% !important; }
+        html[data-orientation="portrait"] .registrationTable col:nth-child(6) { width: 13% !important; }
+        html[data-orientation="portrait"] .registrationTable col:nth-child(8) { width: 20% !important; }
         @media print {
           .printToolbar { display: none; }
           body { font-size: 10.5px; }
         }
       </style>
+      <style id="printLayout">
+        @page { size: A4 landscape; margin: 12mm; }
+        body { font-size: 12pt; line-height: 1.45; }
+        th, .meta, .subtitle { font-size: 10.5pt; }
+        th, td { padding: 7px 8px; }
+        .compact td, .compact th { padding: 6px 7px; }
+        .blankRow td { height: 36px; }
+        .sectionTitle { font-size: 14pt; }
+        .checkbox { font-size: 16pt; }
+        @media screen {
+          body { width: 297mm; max-width: 100%; padding: 12mm; margin: 0 auto; }
+          .printToolbar { flex-wrap: wrap; }
+        }
+        @media print { body { font-size: 12pt; } }
+      </style>
     </head>
     <body>
       <div class="printToolbar">
         <strong>${escapeHtml(title)}</strong>
+        <label>纸张方向
+          <select aria-label="纸张方向" onchange="setPrintOrientation(this.value)">
+            <option value="landscape">A4 横版 · 大字</option>
+            <option value="portrait">A4 竖版</option>
+          </select>
+        </label>
         <button onclick="window.print()">打印 / 另存 PDF</button>
       </div>
       <h1>${escapeHtml(title)}</h1>
       <p class="subtitle">${escapeHtml(subtitle)}</p>
       ${bodyHtml}
+      <script>
+        function setPrintOrientation(orientation) {
+          const landscape = orientation === 'landscape';
+          document.documentElement.dataset.orientation = orientation;
+          const registration = Boolean(document.querySelector('.registrationTable'));
+          const size = landscape || registration ? '12pt' : '11pt';
+          document.getElementById('printLayout').textContent =
+            '@page { size: A4 ' + orientation + '; margin: 12mm; }' +
+            'body { font-size: ' + size + '; line-height: 1.45; }' +
+            'th, .meta, .subtitle { font-size: 10.5pt; }' +
+            'th, td { padding: 7px 8px; }' +
+            '.compact td, .compact th { padding: 6px 7px; }' +
+            '.blankRow td { height: 36px; }' +
+            '.sectionTitle { font-size: 14pt; } .checkbox { font-size: 16pt; }' +
+            '@media screen { body { width: ' + (landscape ? '297mm' : '210mm') + '; max-width: 100%; padding: 12mm; margin: 0 auto; } .printToolbar { flex-wrap: wrap; } }' +
+            '@media print { body { font-size: ' + size + '; } }';
+        }
+        document.querySelector('select[aria-label="纸张方向"]').value = '${defaultOrientation}';
+        setPrintOrientation('${defaultOrientation}');
+      </script>
     </body>
   </html>`;
 }
@@ -642,14 +705,16 @@ function registrationPrintHtml(sortedTables, staging, stats) {
           <td>${escapeHtml(guest.giftNote || "")}</td>
         </tr>`;
     });
-    const blankCount = tableStatus(table) === "backup" ? Math.max(10, table.capacity) : 2;
+    const blankCount = tableStatus(table) === "backup"
+      ? Math.max(10, table.capacity)
+      : table.id === "56" ? Math.max(2, table.capacity - tableCount(table)) : 2;
     const rows = [
       ...guestRows,
       ...registrationBlankRows(table.guests.length + 1, blankCount),
     ];
     return `
       <h2 class="sectionTitle">${escapeHtml(table.id)} 号桌 <span class="meta">${tableCount(table)}/${table.capacity} 人｜${escapeHtml(tableGiftText(table))}｜${escapeHtml(tableNoteText(table) || statusText(table))}</span></h2>
-      <table>
+      <table class="registrationTable">
         <colgroup>
           <col style="width: 7%" />
           <col style="width: 22%" />
@@ -668,7 +733,7 @@ function registrationPrintHtml(sortedTables, staging, stats) {
             <th>伴手礼份数</th>
             <th>签到</th>
             <th>已领伴手礼</th>
-            <th>领取签字</th>
+            <th class="signature">领取签字</th>
             <th>备注</th>
           </tr>
         </thead>
@@ -682,7 +747,8 @@ function registrationPrintHtml(sortedTables, staging, stats) {
   return printDocument(
     "婚礼主登记表（签到 + 伴手礼）",
     `合计 ${stats.seats} 位｜${sortedTables.length} 桌｜${stats.gifts} 份伴手礼｜${stats.warnings} 桌需确认`,
-    body + stagingBody
+    body + stagingBody,
+    "portrait"
   );
 }
 
@@ -690,17 +756,23 @@ function moneyPrintHtml(sortedTables, staging, stats, order = "table") {
   const entries = order === "initial"
     ? sortGuestsByPinyin(guestEntries(sortedTables, staging))
     : guestEntries(sortedTables, staging);
-  const rows = entries.map((guest, index) => `
+  let currentInitial = "";
+  const rows = entries.map((guest, index) => {
+    const initial = guestInitial(guest);
+    const divider = order === "initial" && initial !== currentInitial
+      ? `<tr class="initialDivider"><td colspan="6">${escapeHtml(initial)} · 姓名首字母</td></tr>`
+      : "";
+    currentInitial = initial;
+    return `${divider}
     <tr>
       <td class="center">${index + 1}</td>
       <td>${escapeHtml(guest.tableId)}</td>
       <td><strong>${escapeHtml(guestText(guest))}</strong></td>
       <td class="center">${guest.count}</td>
       <td></td>
-      <td class="center">□ 红包&nbsp;&nbsp;□ 转账</td>
-      <td></td>
       <td>${escapeHtml(guest.moneyNote || "")}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   return printDocument(
     order === "initial" ? "礼金登记表（首字母）" : "礼金登记表（按桌号）",
     `${order === "initial" ? "按姓名首字母排序" : "按桌号顺序"}｜与签到点同步登记，不对外展示｜合计 ${stats.seats} 位｜${sortedTables.length} 桌`,
@@ -708,12 +780,10 @@ function moneyPrintHtml(sortedTables, staging, stats, order = "table") {
       <colgroup>
         <col style="width: 7%" />
         <col style="width: 9%" />
-        <col style="width: 22%" />
+        <col style="width: 30%" />
         <col style="width: 8%" />
-        <col style="width: 14%" />
-        <col style="width: 16%" />
-        <col style="width: 10%" />
-        <col style="width: 14%" />
+        <col style="width: 24%" />
+        <col style="width: 22%" />
       </colgroup>
       <thead>
         <tr>
@@ -722,8 +792,6 @@ function moneyPrintHtml(sortedTables, staging, stats, order = "table") {
           <th>姓名/户名</th>
           <th>人数</th>
           <th>礼金金额</th>
-          <th>方式</th>
-          <th>经手人</th>
           <th>备注</th>
         </tr>
       </thead>
@@ -737,16 +805,16 @@ function indexPrintHtml(sortedTables, staging, stats) {
   let current = "";
   const body = entries.map((guest) => {
     const initial = guestInitial(guest);
-    const heading = initial !== current ? `<h2 class="indexGroup">${escapeHtml(initial)}</h2>` : "";
+    const heading = initial !== current ? `<h2 class="indexGroup">${escapeHtml(initial)} · 姓名首字母</h2>` : "";
     current = initial;
     return `${heading}
-      <table class="compact">
+      <table class="compact guestIndex">
         <colgroup>
-          <col style="width: 24%" />
-          <col style="width: 11%" />
-          <col style="width: 9%" />
-          <col style="width: 13%" />
-          <col style="width: 43%" />
+          <col style="width: 34%" />
+          <col style="width: 12%" />
+          <col style="width: 12%" />
+          <col style="width: 14%" />
+          <col style="width: 28%" />
         </colgroup>
         <tbody>
           <tr>
@@ -754,7 +822,7 @@ function indexPrintHtml(sortedTables, staging, stats) {
             <td>${escapeHtml(guest.tableId)}</td>
             <td class="center">${guest.count} 人</td>
             <td class="center">${guest.giftCount || 0} 份礼</td>
-            <td>${escapeHtml([guest.giftNote, guest.tableNote].filter(Boolean).join("｜"))}</td>
+            <td>${escapeHtml(guest.giftNote || "")}</td>
           </tr>
         </tbody>
       </table>`;
@@ -1020,7 +1088,7 @@ function App() {
   const [routeHash, setRouteHash] = useState(window.location.hash);
   const [selectedId, setSelectedId] = useState(null);
   const [query, setQuery] = useState("");
-  const [targetId, setTargetId] = useState("66");
+  const [targetId, setTargetId] = useState("39");
   const [pickedGuestId, setPickedGuestId] = useState(null);
   const [showGuests, setShowGuests] = useState(false);
   const [mobileView, setMobileView] = useState("list");
@@ -1272,15 +1340,15 @@ function App() {
   }
 
   function clearTable(id) {
-    const backup = tables.find((table) => table.id === "66");
-    if (!backup || id === "66") return;
+    const backup = tables.find((table) => tableStatus(table) === "backup" && table.id !== id);
+    if (!backup) return;
     const source = tables.find((table) => table.id === id);
     persist(tables.map((table) => {
       if (table.id === id) return { ...table, guests: [] };
-      if (table.id === "66") return { ...table, guests: [...table.guests, ...source.guests] };
+      if (table.id === backup.id) return { ...table, guests: [...table.guests, ...source.guests] };
       return table;
     }));
-    setSelectedId("66");
+    setSelectedId(backup.id);
   }
 
   function showCopied(message) {
@@ -1959,7 +2027,7 @@ function GuestList({
         <h2>宾客名单</h2>
         <div className="panelActions">
           <button className="softMini" onClick={() => addGuest(table.id)}>添加宾客</button>
-          <button className="danger" onClick={() => clearTable(table.id)} disabled={table.id === "66" || !table.guests.length}>
+          <button className="danger" onClick={() => clearTable(table.id)} disabled={tableStatus(table) === "backup" || !table.guests.length}>
             <Trash2 size={15} /> 清空至备桌
           </button>
         </div>
